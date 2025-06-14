@@ -1033,6 +1033,7 @@ func (b *builder) build() (rt RuntimeConfig, err error) {
 		KVMaxValueSize:             uint64Val(c.Limits.KVMaxValueSize),
 		LeaveDrainTime:             b.durationVal("performance.leave_drain_time", c.Performance.LeaveDrainTime),
 		LeaveOnTerm:                leaveOnTerm,
+		EnableXDSLoadBalancing:     boolVal(c.Performance.EnableXDSLoadBalancing),
 		StaticRuntimeConfig: StaticRuntimeConfig{
 			EncryptVerifyIncoming: boolVal(c.EncryptVerifyIncoming),
 			EncryptVerifyOutgoing: boolVal(c.EncryptVerifyOutgoing),
@@ -1212,6 +1213,8 @@ func (b *builder) validate(rt RuntimeConfig) error {
 	// validContentPath defines a regexp for a valid content path name.
 	validContentPath := regexp.MustCompile(`^[A-Za-z0-9/_-]+$`)
 	hasVersion := regexp.MustCompile(`^/v\d+/$`)
+	// reDNSCompatible ensures that the name is capable to be part of a DNS name.
+	reDNSCompatible := regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 	// ----------------------------------------------------------------
 	// check required params we cannot recover from first
 	//
@@ -1222,6 +1225,9 @@ func (b *builder) validate(rt RuntimeConfig) error {
 
 	if err := validateBasicName("datacenter", rt.Datacenter, false); err != nil {
 		return err
+	}
+	if !reDNSCompatible.MatchString(rt.Datacenter) {
+		b.warn("Datacenter : %q will not be PKI X.509 compatible due to invalid characters. Valid characters include lowercase alphanumeric characters with dashes in between.", rt.Datacenter)
 	}
 	if rt.DataDir == "" && !rt.DevMode {
 		return fmt.Errorf("data_dir cannot be empty")
@@ -1410,7 +1416,7 @@ func (b *builder) validate(rt RuntimeConfig) error {
 			}
 			return fmt.Errorf("CRITICAL: Deprecated data folder found at %q!\n"+
 				"Consul will refuse to boot with this directory present.\n"+
-				"See https://www.consul.io/docs/upgrade-specific.html for more information.", mdbPath)
+				"See https://developer.hashicorp.com/docs/upgrade-specific.html for more information.", mdbPath)
 		}
 
 		// Raft LogStore validation
@@ -1510,11 +1516,11 @@ func (b *builder) validate(rt RuntimeConfig) error {
 	//
 
 	if rt.ServerMode && !rt.DevMode && !rt.Bootstrap && rt.BootstrapExpect == 2 {
-		b.warn(`bootstrap_expect = 2: A cluster with 2 servers will provide no failure tolerance. See https://www.consul.io/docs/internals/consensus.html#deployment-table`)
+		b.warn(`bootstrap_expect = 2: A cluster with 2 servers will provide no failure tolerance. See https://developer.hashicorp.com/docs/internals/consensus.html#deployment-table`)
 	}
 
 	if rt.ServerMode && !rt.Bootstrap && rt.BootstrapExpect > 2 && rt.BootstrapExpect%2 == 0 {
-		b.warn(`bootstrap_expect is even number: A cluster with an even number of servers does not achieve optimum fault tolerance. See https://www.consul.io/docs/internals/consensus.html#deployment-table`)
+		b.warn(`bootstrap_expect is even number: A cluster with an even number of servers does not achieve optimum fault tolerance. See https://developer.hashicorp.com/docs/internals/consensus.html#deployment-table`)
 	}
 
 	if rt.ServerMode && rt.Bootstrap && rt.BootstrapExpect == 0 {
